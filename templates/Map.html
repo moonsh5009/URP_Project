@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>URP THE END DO YOU KNOW BTS?</title>
+    </head>
+    <style>
+        .map_wrap, .map_wrap * {margin:0;padding:0;font-family:'Malgun Gothic',dotum,'돋움',sans-serif;font-size:12px;}
+        .map_wrap a, .map_wrap a:hover, .map_wrap a:active{color:#000;text-decoration: none;}
+        .map_wrap {position:relative;width:100%;height:95vh;}
+        #menu_wrap {position:absolute;top:0;left:0;bottom:0;width:350px;margin:10px 0 30px 10px;padding:5px;overflow-y:auto;background:rgba(255, 255, 255, 0.7);z-index: 1;font-size:12px;border-radius: 10px;}
+        .bg_white {background:#fff;}
+        #menu_wrap hr {display: block; height: 1px;border: 0; border-top: 2px solid #5F5F5F;margin:3px 0;}
+        #menu_wrap .option{text-align: center;}
+        #menu_wrap .option p {margin:10px 0;}
+        #menu_wrap .option button {margin-left:5px;}
+        #placesList li {list-style: none;}
+        #placesList .item {position:relative;border-bottom:1px solid #888;overflow: hidden;cursor: pointer;min-height: 65px;}
+        #placesList .item span {display: block;margin-top:4px;}
+        #placesList .item h5, #placesList .item .info {text-overflow: ellipsis;overflow: hidden;white-space: nowrap;}
+        #pagination {margin:10px auto;text-align: center;}
+        #pagination a {display:inline-block;margin-right:10px;}
+        #pagination .on {font-weight: bold; cursor: default;color:#777;}
+        .info {position:relative;top:5px;left:5px;border-radius:6px;border: 1px solid #ccc;border-bottom:10px solid #ddd;font-size:12px;padding:5px;background:#fff;list-style:none;margin:0;}
+        .info:nth-of-type(n) {border:0; box-shadow:0px 1px 2px #888;}
+        .info {display:inline-block;}
+        .number {font-weight:bold;color:#00a0e9;}
+
+    </style>
+    <body>
+        <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+<!--        <div id="map" style="width:100%;height:95vh;"></div>-->
+        <div class="map_wrap">
+            <div id="map" style="width:100%;height:100%;position:relative;overflow:hidden;"></div>
+
+        <div id="menu_wrap" class="bg_white">
+            <ul id="placesList"></ul>
+            <div id="pagination"></div>
+            </div>
+        </div>
+        <script type="text/javascript" src="http://dapi.kakao.com/v2/maps/sdk.js?appkey=55be8d73b856ce6f9f067b9d1e3d2775"></script>
+        <script type="text/javascript" src="{{ url_for('static', filename='js/KakaoMap.js') }}"></script>
+        <script>
+            var hosp_info = {{ hospitals | tojson }};
+            var Agents;
+            var GraphInfo = [];
+            var hospPatients;
+
+            var sys_time = 0;
+            var iGraph = 0;
+
+            var moveFlag = false;
+            var drawingOverlay;
+
+            if (!drawingOverlay) {
+                drawingOverlay = new kakao.maps.CustomOverlay({
+                    xAnchor: 0,
+                    yAnchor: 0,
+                    zIndex: 1
+                });
+            }
+
+            var map = createKakaoMap({{ startLat | tojson }}, {{ startLng | tojson }}, 7, 'map');
+            var infowindow = new kakao.maps.InfoWindow({zIndex:1});
+
+            var m_nodes = []
+            for(var i = 0; i < hosp_info.lat.length; i++) {
+                var latlng = createLatlng(hosp_info.lat[i], hosp_info.lng[i])
+                m_nodes.push(createCircle(latlng, '#000000', 0.4));
+                m_nodes[m_nodes.length - 1].setMap(map);
+            }
+
+            invisibleHospital();
+
+            var simulationID = null;
+            var m_Agents = []
+            var m_aEdges = []
+            function mapUpdate() {
+                while(m_Agents.length)
+                    m_Agents.pop().setMap(null);
+                while(m_aEdges.length)
+                    m_aEdges.pop().setMap(null);
+
+                for (var i = 0; i < Agents.length; i++) {
+                    //m_nodes[i].setMap(null);
+                    m_nodes[i].setMap(map);
+                    m_nodes[i].setOptions({
+                        //strokeWeight: 2,
+                        strokeColor: '#AAAAAA',
+                        fillColor: '#AAAAAA',
+                        //strokeOpacity: 0.8,
+                        //strokeStyle: 'dashed'
+                    });
+                }
+                if (!iGraph) {
+                    for (var i = 0; i < Agents.length; i++) {
+                        if (hospPatients[i] > 0) {
+                            m_nodes[i].setOptions({
+                                //strokeWeight: 2,
+                                strokeColor: '#000000',
+                                fillColor: '#000000',
+                                //strokeOpacity: 0.8,
+                                //strokeStyle: 'dashed'
+                            });
+                        }
+                    }
+                    for (var i = 0; i < GraphInfo[iGraph].length; i++) {
+                        var ind = GraphInfo[iGraph][i].index;
+                        if (GraphInfo[iGraph][i].endTime == GraphInfo[iGraph][i].startTime)
+                            continue;
+
+                        var w = (sys_time - GraphInfo[iGraph][i].startTime) /
+                            (GraphInfo[iGraph][i].endTime - GraphInfo[iGraph][i].startTime);
+                        if (w >= 1)
+                            continue;
+
+                        m_nodes[ind].setOptions({
+                            //strokeWeight: 2,
+                            strokeColor: '#33AA33',
+                            fillColor: '#33AA33',
+                            //strokeOpacity: 0.8,
+                            //strokeStyle: 'dashed'
+                        });
+
+                        var lat0 = GraphInfo[iGraph][i].startPos[0] + (hosp_info.lat[ind] - GraphInfo[iGraph][i].startPos[0]) * w;
+                        var lng0 = GraphInfo[iGraph][i].startPos[1] + (hosp_info.lng[ind] - GraphInfo[iGraph][i].startPos[1]) * w;
+                        var latlng = createLatlng(lat0, lng0);
+                        var latlng0 = createLatlng(GraphInfo[iGraph][i].startPos[0], GraphInfo[iGraph][i].startPos[1])
+                        var latlng1 = createLatlng(hosp_info.lat[ind], hosp_info.lng[ind]);
+
+                        m_aEdges.push(createLine(latlng, latlng1, '#000000', 2.0));
+                        m_aEdges[m_aEdges.length - 1].setMap(map);
+
+                        m_Agents.push(createCircle(latlng, '#FF0000', GraphInfo[iGraph][i].num / 300));
+                        m_Agents[m_Agents.length - 1].setMap(map);
+                    }
+                    for (var i = 0; i < hospPatients.length; i++) {
+                        if (hospPatients[i] > 0) {
+                            var latlng = createLatlng(hosp_info.lat[i], hosp_info.lng[i]);
+                            m_Agents.push(createCircle(latlng, '#0000FF', hospPatients[i] / 300));
+                            m_Agents[m_Agents.length - 1].setMap(map);
+                        }
+                    }
+                }
+                else {
+                    var latlng = createLatlng(GraphInfo[iGraph][0].startPos[0], GraphInfo[iGraph][0].startPos[1]);
+                    m_Agents.push(createCircle(latlng, '#AA33AA', 1));
+                    m_Agents[m_Agents.length - 1].setMap(map);
+                    for (var i = 0; i < GraphInfo[iGraph].length; i++) {
+                        var ind = GraphInfo[iGraph][i].index;
+                        m_nodes[ind].setOptions({
+                            //strokeWeight: 2,
+                            strokeColor: '#33AA33',
+                            fillColor: '#33AA33',
+                            //strokeOpacity: 0.8,
+                            //strokeStyle: 'dashed'
+                        });
+                        var w = (sys_time - GraphInfo[iGraph][i].startTime) / (GraphInfo[iGraph][i].endTime - GraphInfo[iGraph][i].startTime);
+
+                        if (GraphInfo[iGraph][i].endTime == GraphInfo[iGraph][i].startTime)
+                            continue;
+                        if (w > 1)
+                            w = 1;
+                        var lat0 = GraphInfo[iGraph][i].startPos[0] + (hosp_info.lat[ind] - GraphInfo[iGraph][i].startPos[0]) * w;
+                        var lng0 = GraphInfo[iGraph][i].startPos[1] + (hosp_info.lng[ind] - GraphInfo[iGraph][i].startPos[1]) * w;
+                        var latlng = createLatlng(lat0, lng0);
+                        var latlng0 = createLatlng(GraphInfo[iGraph][i].startPos[0], GraphInfo[iGraph][i].startPos[1])
+                        var latlng1 = createLatlng(hosp_info.lat[ind], hosp_info.lng[ind]);
+
+                        m_aEdges.push(createLine(latlng, latlng1, '#000000', 2.0));
+                        m_aEdges[m_aEdges.length - 1].setMap(map);
+
+                        m_Agents.push(createCircle(latlng, '#FF0000', GraphInfo[iGraph][i].num / 300));
+                        m_Agents[m_Agents.length - 1].setMap(map);
+                    }
+                }
+            }
+
+            function updateSimulation() {
+                $.ajax({
+                    type: 'POST',
+                    url: '/update',
+                    data: JSON.stringify({ dt: 1 / 30 }),
+                    contentType: 'application/json',
+                    success: function (result) {
+                        Agents = result.Agents;
+                        var chk = (GraphInfo.length == 0);
+                        GraphInfo = result.GraphInfo;
+                        //if (chk)
+                        //    displayHospital(GraphInfo[iGraph], hosp_info.HosName);
+                        sys_time = result.time;
+                        hospPatients = result.hospPatients;
+                        mapUpdate();
+                    }
+                });
+            }
+
+            //simulationID = setInterval(updateSimulation, 500);
+            kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+                var latlng = mouseEvent.latLng;
+                $.ajax({
+                    type: 'POST',
+                    url: '/addAgents',
+                    data: JSON.stringify({ lat: latlng.getLat(), lng: latlng.getLng() }),
+                    contentType: 'application/json',
+                    success: function (result) {
+                        if (simulationID == null){
+                            simulationID = setInterval(updateSimulation, 500);
+                            invisibleHospital();
+                            moveFlag = true;
+                        }
+                        else if (GraphInfo.length > 0) {
+                            iGraph++;
+                            if (iGraph >= GraphInfo.length) {
+                                iGraph = 0;
+                                invisibleHospital();
+                            } else {
+                                visibleHospital();
+                                displayHospital(GraphInfo[iGraph], hosp_info.HosName);
+                            }
+                        }
+                    }
+                });
+            });
+            kakao.maps.event.addListener(map, 'mousemove', function (mouseEvent) {
+
+                // 마우스 커서의 현재 위치를 얻어옵니다
+                var mousePosition = mouseEvent.latLng;
+                mouse_lat = mousePosition.getLat();
+                mouse_lng = mousePosition.getLng();
+
+                for (var i = 0; i < hosp_info.lat.length; i++) {
+                    if (m_nodes[i].getBounds().contain(mousePosition)) {
+                        var latlng = createLatlng(hosp_info.lat[i], hosp_info.lng[i]);
+                        var name = hosp_info.HosName[i]
+                        content = '<div class="info"><span class="number">' + name + '</span></div>';
+                        drawingOverlay.setPosition(latlng);
+                        drawingOverlay.setContent(content);
+                        drawingOverlay.setMap(map);
+                    }
+                }
+            });
+        </script>
+    </body>
+</html>
