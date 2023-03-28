@@ -2,7 +2,9 @@
 
 논문 : https://www.dbpia.co.kr/journal/articleDetail?nodeId=NODE11037810
 
+___
 ***
+___
 - 출발지역에 맞게 주석 수정
     1. main.py에서 시작 위치 수정 (줄13~)
     2. main.py에서 환자 생성 수정 (줄101~)
