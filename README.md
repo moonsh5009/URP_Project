@@ -16,4 +16,4 @@
     - 발생한 모든 환자들의 이동 현황
 ***
 ## 실행 영상
-
+https://github.com/moonsh5009/URP_Project/blob/master/%EC%8B%A4%ED%96%89%EC%98%81%EC%83%81.mp4
